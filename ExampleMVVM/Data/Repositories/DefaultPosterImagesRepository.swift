@@ -10,37 +10,23 @@ import Foundation
 final class DefaultPosterImagesRepository {
     
     private let dataTransferService: DataTransferService
-    private let imageNotFoundData: Data?
-    
-    init(dataTransferService: DataTransferService,
-         imageNotFoundData: Data?) {
+
+    init(dataTransferService: DataTransferService) {
         self.dataTransferService = dataTransferService
-        self.imageNotFoundData = imageNotFoundData
     }
 }
 
 extension DefaultPosterImagesRepository: PosterImagesRepository {
     
-    func image(with imagePath: String, width: Int, completion: @escaping (Result<Data, Error>) -> Void) -> Cancellable? {
+    func fetchImage(with imagePath: String, width: Int, completion: @escaping (Result<Data, Error>) -> Void) -> Cancellable? {
         
-        let endpoint = APIEndpoints.moviePoster(path: imagePath, width: width)
-        let networkTask = dataTransferService.request(with: endpoint) { [weak self] (response: Result<Data, Error>) in
-            guard let strongSelf = self else { return }
-            
-            switch response {
-            case .success(let data):
-                completion(.success(data))
-                return
-            case .failure(let error):
-                if case let DataTransferError.networkFailure(networkError) = error, networkError.isNotFoundError,
-                    let imageNotFoundData = strongSelf.imageNotFoundData {
-                    completion(.success(imageNotFoundData))
-                    return
-                }
-                completion(.failure(error))
-                return
-            }
+        let endpoint = APIEndpoints.getMoviePoster(path: imagePath, width: width)
+        let task = RepositoryTask()
+        task.networkTask = dataTransferService.request(with: endpoint) { (result: Result<Data, DataTransferError>) in
+
+            let result = result.mapError { $0 as Error }
+            DispatchQueue.main.async { completion(result) }
         }
-        return RepositoryTask(networkTask: networkTask)
+        return task
     }
 }

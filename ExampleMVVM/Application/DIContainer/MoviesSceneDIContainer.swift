@@ -18,8 +18,9 @@ final class MoviesSceneDIContainer {
     private let dependencies: Dependencies
 
     // MARK: - Persistent Storage
-    lazy var moviesQueriesStorage: MoviesQueriesStorage = CoreDataStorage(maxStorageLimit: 10)
-    
+    lazy var moviesQueriesStorage: MoviesQueriesStorage = CoreDataMoviesQueriesStorage(maxStorageLimit: 10)
+    lazy var moviesResponseCache: MoviesResponseStorage = CoreDataMoviesResponseStorage()
+
     init(dependencies: Dependencies) {
         self.dependencies = dependencies        
     }
@@ -30,75 +31,73 @@ final class MoviesSceneDIContainer {
                                           moviesQueriesRepository: makeMoviesQueriesRepository())
     }
     
-    func makeFetchRecentMovieQueriesUseCase() -> FetchRecentMovieQueriesUseCase {
-        return DefaultFetchRecentMovieQueriesUseCase(moviesQueriesRepository: makeMoviesQueriesRepository())
+    func makeFetchRecentMovieQueriesUseCase(requestValue: FetchRecentMovieQueriesUseCase.RequestValue,
+                                            completion: @escaping (FetchRecentMovieQueriesUseCase.ResultValue) -> Void) -> UseCase {
+        return FetchRecentMovieQueriesUseCase(requestValue: requestValue,
+                                              completion: completion,
+                                              moviesQueriesRepository: makeMoviesQueriesRepository()
+        )
     }
     
     // MARK: - Repositories
     func makeMoviesRepository() -> MoviesRepository {
-        return DefaultMoviesRepository(dataTransferService: dependencies.apiDataTransferService)
+        return DefaultMoviesRepository(dataTransferService: dependencies.apiDataTransferService, cache: moviesResponseCache)
     }
     func makeMoviesQueriesRepository() -> MoviesQueriesRepository {
         return DefaultMoviesQueriesRepository(dataTransferService: dependencies.apiDataTransferService,
                                               moviesQueriesPersistentStorage: moviesQueriesStorage)
     }
     func makePosterImagesRepository() -> PosterImagesRepository {
-        return DefaultPosterImagesRepository(dataTransferService: dependencies.imageDataTransferService,
-                                             imageNotFoundData: UIImage(named: "image_not_found")?.pngData())
+        return DefaultPosterImagesRepository(dataTransferService: dependencies.imageDataTransferService)
     }
     
     // MARK: - Movies List
-    func makeMoviesListViewController() -> UIViewController {
-        return MoviesListViewController.create(with: makeMoviesListViewModel(), moviesListViewControllersFactory: self)
+    func makeMoviesListViewController(actions: MoviesListViewModelActions) -> MoviesListViewController {
+        return MoviesListViewController.create(with: makeMoviesListViewModel(actions: actions),
+                                               posterImagesRepository: makePosterImagesRepository())
     }
     
-    func makeMoviesListViewModel() -> MoviesListViewModel {
+    func makeMoviesListViewModel(actions: MoviesListViewModelActions) -> MoviesListViewModel {
         return DefaultMoviesListViewModel(searchMoviesUseCase: makeSearchMoviesUseCase(),
-                                          posterImagesRepository: makePosterImagesRepository())
+                                          actions: actions)
     }
     
     // MARK: - Movie Details
-    func makeMoviesDetailsViewController(title: String,
-                                         overview: String,
-                                         posterPlaceholderImage: Data?,
-                                         posterPath: String?) -> UIViewController {
-        return MovieDetailsViewController.create(with: makeMoviesDetailsViewModel(title: title,
-                                                                                  overview: overview,
-                                                                                  posterPlaceholderImage: posterPlaceholderImage,
-                                                                                  posterPath: posterPath))
+    func makeMoviesDetailsViewController(movie: Movie) -> UIViewController {
+        return MovieDetailsViewController.create(with: makeMoviesDetailsViewModel(movie: movie))
     }
     
-    func makeMoviesDetailsViewModel(title: String,
-                                    overview: String,
-                                    posterPlaceholderImage: Data?,
-                                    posterPath: String?) -> MovieDetailsViewModel {
-        return DefaultMovieDetailsViewModel(title: title,
-                                            overview: overview,
-                                            posterPlaceholderImage: posterPlaceholderImage,
-                                            posterPath: posterPath,
+    func makeMoviesDetailsViewModel(movie: Movie) -> MovieDetailsViewModel {
+        return DefaultMovieDetailsViewModel(movie: movie,
                                             posterImagesRepository: makePosterImagesRepository())
     }
     
     // MARK: - Movies Queries Suggestions List
-    func makeMoviesQueriesSuggestionsListViewController(delegate: MoviesQueryListViewModelDelegate) -> UIViewController {
+    func makeMoviesQueriesSuggestionsListViewController(didSelect: @escaping MoviesQueryListViewModelDidSelectAction) -> UIViewController {
         if #available(iOS 13.0, *) { // SwiftUI
-            let view = MoviesQueryListView(viewModelWrapper: makeMoviesQueryListViewModelWrapper(delegate: delegate))
+            let view = MoviesQueryListView(viewModelWrapper: makeMoviesQueryListViewModelWrapper(didSelect: didSelect))
             return UIHostingController(rootView: view)
         } else { // UIKit
-            return MoviesQueriesTableViewController.create(with: makeMoviesQueryListViewModel(delegate: delegate))
+            return MoviesQueriesTableViewController.create(with: makeMoviesQueryListViewModel(didSelect: didSelect))
         }
     }
     
-    func makeMoviesQueryListViewModel(delegate: MoviesQueryListViewModelDelegate) -> MoviesQueryListViewModel {
+    func makeMoviesQueryListViewModel(didSelect: @escaping MoviesQueryListViewModelDidSelectAction) -> MoviesQueryListViewModel {
         return DefaultMoviesQueryListViewModel(numberOfQueriesToShow: 10,
-                                               fetchRecentMovieQueriesUseCase: makeFetchRecentMovieQueriesUseCase(),
-                                               delegate: delegate)
+                                               fetchRecentMovieQueriesUseCaseFactory: makeFetchRecentMovieQueriesUseCase,
+                                               didSelect: didSelect)
     }
 
     @available(iOS 13.0, *)
-    func makeMoviesQueryListViewModelWrapper(delegate: MoviesQueryListViewModelDelegate) -> MoviesQueryListViewModelWrapper {
-        return MoviesQueryListViewModelWrapper(viewModel: makeMoviesQueryListViewModel(delegate: delegate))
+    func makeMoviesQueryListViewModelWrapper(didSelect: @escaping MoviesQueryListViewModelDidSelectAction) -> MoviesQueryListViewModelWrapper {
+        return MoviesQueryListViewModelWrapper(viewModel: makeMoviesQueryListViewModel(didSelect: didSelect))
+    }
+
+    // MARK: - Flow Coordinators
+    func makeMoviesSearchFlowCoordinator(navigationController: UINavigationController) -> MoviesSearchFlowCoordinator {
+        return MoviesSearchFlowCoordinator(navigationController: navigationController,
+                                           dependencies: self)
     }
 }
 
-extension MoviesSceneDIContainer: MoviesListViewControllersFactory {}
+extension MoviesSceneDIContainer: MoviesSearchFlowCoordinatorDependencies {}

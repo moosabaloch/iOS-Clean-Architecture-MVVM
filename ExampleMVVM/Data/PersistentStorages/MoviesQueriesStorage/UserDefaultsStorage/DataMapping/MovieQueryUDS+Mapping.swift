@@ -22,8 +22,8 @@ extension MovieQueryUDS {
     }
 }
 
-extension MovieQuery {
-    init(movieQueryUDS: MovieQueryUDS) {
-        query = movieQueryUDS.query
+extension MovieQueryUDS {
+    func toDomain() -> MovieQuery {
+        return .init(query: query)
     }
 }

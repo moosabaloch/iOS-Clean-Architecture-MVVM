@@ -7,26 +7,30 @@
 
 import Foundation
 
-protocol FetchRecentMovieQueriesUseCase {
-    func execute(requestValue: FetchRecentMovieQueriesUseCaseRequestValue,
-                 completion: @escaping (Result<[MovieQuery], Error>) -> Void) -> Cancellable?
-}
+// This is another option to create Use Case using more generic way
+final class FetchRecentMovieQueriesUseCase: UseCase {
 
-final class DefaultFetchRecentMovieQueriesUseCase: FetchRecentMovieQueriesUseCase {
-    
+    struct RequestValue {
+        let maxCount: Int
+    }
+    typealias ResultValue = (Result<[MovieQuery], Error>)
+
+    private let requestValue: RequestValue
+    private let completion: (ResultValue) -> Void
     private let moviesQueriesRepository: MoviesQueriesRepository
-    
-    init(moviesQueriesRepository: MoviesQueriesRepository) {
+
+    init(requestValue: RequestValue,
+         completion: @escaping (ResultValue) -> Void,
+         moviesQueriesRepository: MoviesQueriesRepository) {
+
+        self.requestValue = requestValue
+        self.completion = completion
         self.moviesQueriesRepository = moviesQueriesRepository
     }
     
-    func execute(requestValue: FetchRecentMovieQueriesUseCaseRequestValue,
-                 completion: @escaping (Result<[MovieQuery], Error>) -> Void) -> Cancellable? {
-        moviesQueriesRepository.recentsQueries(number: requestValue.number, completion: completion)
+    func start() -> Cancellable? {
+
+        moviesQueriesRepository.fetchRecentsQueries(maxCount: requestValue.maxCount, completion: completion)
         return nil
     }
-}
-
-struct FetchRecentMovieQueriesUseCaseRequestValue {
-    let number: Int
 }

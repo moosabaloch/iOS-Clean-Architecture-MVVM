@@ -2,76 +2,31 @@
 //  MoviesListItemViewModel.swift
 //  ExampleMVVM
 //
-//  Created by Oleh Kudinov on 18.02.19.
+//  Created by Oleh Kudinov on 06/04/2020.
 //
+// **Note**: This item view model is to display data and does not contain any domain model to prevent views accessing it
 
 import Foundation
 
-protocol MoviesListItemViewModelInput {
-    func didEndDisplaying()
-    func updatePosterImage(width: Int)
-}
-
-protocol MoviesListItemViewModelOutput {
-    var title: String { get }
-    var overview: String { get }
-    var releaseDate: String { get }
-    var posterImage: Observable<Data?> { get }
-    var posterPath: String? { get }
-}
-
-protocol MoviesListItemViewModel: MoviesListItemViewModelInput, MoviesListItemViewModelOutput {}
-
-final class DefaultMoviesListItemViewModel: MoviesListItemViewModel {
-    
-    private(set) var id: MovieId
-
-    // MARK: - OUTPUT
+struct MoviesListItemViewModel: Equatable {
     let title: String
     let overview: String
     let releaseDate: String
-    let posterPath: String?
-    let posterImage: Observable<Data?> = Observable(nil)
-
-    private let posterImagesRepository: PosterImagesRepository
-    private var imageLoadTask: Cancellable? { willSet { imageLoadTask?.cancel() } }
-
-    init(movie: Movie,
-         posterImagesRepository: PosterImagesRepository) {
-        self.id = movie.id
-        self.title = movie.title
-        self.posterPath = movie.posterPath
-        self.overview = movie.overview
-        self.releaseDate = movie.releaseDate != nil ? dateFormatter.string(from: movie.releaseDate!) : NSLocalizedString("To be announced", comment: "")
-        self.posterImagesRepository = posterImagesRepository
-    }
+    let posterImagePath: String?
 }
 
-// MARK: - INPUT. View event methods
-extension DefaultMoviesListItemViewModel {
-    
-    func didEndDisplaying() {
-        posterImage.value = nil
-    }
-    
-    func updatePosterImage(width: Int) {
-        posterImage.value = nil
-        guard let posterPath = posterPath else { return }
-        
-        imageLoadTask = posterImagesRepository.image(with: posterPath, width: width) { [weak self] result in
-            guard self?.posterPath == posterPath else { return }
-            switch result {
-            case .success(let data):
-                self?.posterImage.value = data
-            case .failure: break
-            }
-            self?.imageLoadTask = nil
+extension MoviesListItemViewModel {
+
+    init(movie: Movie) {
+        self.title = movie.title ?? ""
+        self.posterImagePath = movie.posterPath
+        self.overview = movie.overview ?? ""
+        if let releaseDate = movie.releaseDate {
+            self.releaseDate = "\(NSLocalizedString("Release Date", comment: "")): \(dateFormatter.string(from: releaseDate))"
+        } else {
+            self.releaseDate = NSLocalizedString("To be announced", comment: "")
         }
     }
-}
-
-func == (lhs: DefaultMoviesListItemViewModel, rhs: DefaultMoviesListItemViewModel) -> Bool {
-    return (lhs.id == rhs.id)
 }
 
 private let dateFormatter: DateFormatter = {

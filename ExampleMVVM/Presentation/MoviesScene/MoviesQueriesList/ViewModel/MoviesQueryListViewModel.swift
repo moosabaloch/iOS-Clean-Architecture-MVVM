@@ -7,6 +7,8 @@
 
 import Foundation
 
+typealias MoviesQueryListViewModelDidSelectAction = (MovieQuery) -> Void
+
 protocol MoviesQueryListViewModelInput {
     func viewWillAppear()
     func didSelect(item: MoviesQueryListItemViewModel)
@@ -18,37 +20,39 @@ protocol MoviesQueryListViewModelOutput {
 
 protocol MoviesQueryListViewModel: MoviesQueryListViewModelInput, MoviesQueryListViewModelOutput { }
 
-protocol MoviesQueryListViewModelDelegate: class {
-    
-    func moviesQueriesListDidSelect(movieQuery: MovieQuery)
-}
+typealias FetchRecentMovieQueriesUseCaseFactory = (
+    FetchRecentMovieQueriesUseCase.RequestValue,
+    @escaping (FetchRecentMovieQueriesUseCase.ResultValue) -> Void
+    ) -> UseCase
 
 final class DefaultMoviesQueryListViewModel: MoviesQueryListViewModel {
 
     private let numberOfQueriesToShow: Int
-    private let fetchRecentMovieQueriesUseCase: FetchRecentMovieQueriesUseCase
-    private weak var delegate: MoviesQueryListViewModelDelegate?
+    private let fetchRecentMovieQueriesUseCaseFactory: FetchRecentMovieQueriesUseCaseFactory
+    private let didSelect: MoviesQueryListViewModelDidSelectAction?
     
     // MARK: - OUTPUT
     let items: Observable<[MoviesQueryListItemViewModel]> = Observable([])
     
     init(numberOfQueriesToShow: Int,
-         fetchRecentMovieQueriesUseCase: FetchRecentMovieQueriesUseCase,
-         delegate: MoviesQueryListViewModelDelegate? = nil) {
+         fetchRecentMovieQueriesUseCaseFactory: @escaping FetchRecentMovieQueriesUseCaseFactory,
+         didSelect: MoviesQueryListViewModelDidSelectAction? = nil) {
         self.numberOfQueriesToShow = numberOfQueriesToShow
-        self.fetchRecentMovieQueriesUseCase = fetchRecentMovieQueriesUseCase
-        self.delegate = delegate
+        self.fetchRecentMovieQueriesUseCaseFactory = fetchRecentMovieQueriesUseCaseFactory
+        self.didSelect = didSelect
     }
     
     private func updateMoviesQueries() {
-        let request = FetchRecentMovieQueriesUseCaseRequestValue(number: numberOfQueriesToShow)
-        _ = fetchRecentMovieQueriesUseCase.execute(requestValue: request) { [weak self] result in
+        let request = FetchRecentMovieQueriesUseCase.RequestValue(maxCount: numberOfQueriesToShow)
+        let completion: (FetchRecentMovieQueriesUseCase.ResultValue) -> Void = { result in
             switch result {
             case .success(let items):
-                self?.items.value = items.map { $0.query }.map ( DefaultMoviesQueryListItemViewModel.init )
+                self.items.value = items.map { $0.query }.map(MoviesQueryListItemViewModel.init)
             case .failure: break
             }
         }
+        let useCase = fetchRecentMovieQueriesUseCaseFactory(request, completion)
+        useCase.start()
     }
 }
 
@@ -60,6 +64,6 @@ extension DefaultMoviesQueryListViewModel {
     }
     
     func didSelect(item: MoviesQueryListItemViewModel) {
-        delegate?.moviesQueriesListDidSelect(movieQuery: MovieQuery(query: item.query))
+        didSelect?(MovieQuery(query: item.query))
     }
 }

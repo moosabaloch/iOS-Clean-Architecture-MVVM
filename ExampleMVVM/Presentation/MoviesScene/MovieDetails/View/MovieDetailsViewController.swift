@@ -9,13 +9,13 @@
 import UIKit
 
 final class MovieDetailsViewController: UIViewController, StoryboardInstantiable {
-    
-    private static let fadeTransitionDuration: CFTimeInterval = 0.4
-    
+
     @IBOutlet private var posterImageView: UIImageView!
     @IBOutlet private var overviewTextView: UITextView!
-    
-    var viewModel: MovieDetailsViewModel!
+
+    // MARK: - Lifecycle
+
+    private var viewModel: MovieDetailsViewModel!
     
     static func create(with viewModel: MovieDetailsViewModel) -> MovieDetailsViewController {
         let view = MovieDetailsViewController.instantiateViewController()
@@ -25,19 +25,25 @@ final class MovieDetailsViewController: UIViewController, StoryboardInstantiable
     
     override func viewDidLoad() {
         super.viewDidLoad()
-
+        setupViews()
         bind(to: viewModel)
-        view.accessibilityIdentifier = AccessibilityIdentifier.movieDetailsView
     }
-    
+
     private func bind(to viewModel: MovieDetailsViewModel) {
-        viewModel.title.observe(on: self) { [weak self] in self?.title = $0 }
-        viewModel.posterImage.observe(on: self) { [weak self] in self?.posterImageView.image = $0.flatMap { UIImage(data: $0) } }
-        viewModel.overview.observe(on: self) { [weak self] in self?.overviewTextView.text = $0 }
+        viewModel.posterImage.observe(on: self) { [weak self] in self?.posterImageView.image = $0.flatMap(UIImage.init) }
     }
     
-    override func viewWillLayoutSubviews() {
-        super.viewWillLayoutSubviews()
-        viewModel.updatePosterImage(width: Int(self.posterImageView.bounds.width))
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        viewModel.updatePosterImage(width: Int(posterImageView.imageSizeAfterAspectFit.scaledSize.width))
+    }
+
+    // MARK: - Private
+
+    private func setupViews() {
+        title = viewModel.title
+        overviewTextView.text = viewModel.overview
+        posterImageView.isHidden = viewModel.isPosterImageHidden
+        view.accessibilityIdentifier = AccessibilityIdentifier.movieDetailsView
     }
 }
